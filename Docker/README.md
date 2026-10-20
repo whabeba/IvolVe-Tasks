@@ -60,7 +60,7 @@ docker run -it --name container1 app1
 
 Screenshot:
 
-![app1 build and run](screenshots/app1.png)
+![app1 build and run](Lab3/screenshots/app1.png)
 
 ### Results
 
@@ -121,7 +121,7 @@ docker run -it --name container2 app2
 
 Screenshot:
 
-![app2 build and run](screenshots/app2.png)
+![app2 build and run](Lab3/screenshots/app2.png)
 
 ### Results
 

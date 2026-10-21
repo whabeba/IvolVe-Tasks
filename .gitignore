@@ -1,1 +1,20 @@
 lab4/ImageOptimization-/lab-image.tar
+
+# Python virtual environments and cache
+**/venv/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+.env.*
+
+# Build and dependency artifacts
+**/target/
+**/node_modules/
+
+# Docker image archives
+*.tar
+*.tar.gz
+*.tar.xz

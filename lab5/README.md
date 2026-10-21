@@ -36,7 +36,7 @@ sudo apt-get install trivy -y
 trivy --version
 ```
 
-![Trivy Installation](screenshots/trivydownload.png)
+![Trivy Installation](TrivyImage/screenshots/trivydownload.png)
 
 > Trivy version 0.71.2 installed successfully
 
@@ -48,7 +48,7 @@ trivy --version
 trivy image --format json -o trivy-report.json trivy-lab:v1
 ```
 
-![Scan trivy-lab:v1](screenshots/trivyreport.png)
+![Scan trivy-lab:v1](TrivyImage/screenshots/trivyreport.png)
 
 > Detected OS: debian family version 11.11 with 409 packages scanned
 
@@ -83,11 +83,11 @@ Total vulnerabilities found in trivy-lab:v1 (node:18-bullseye):
 | UNKNOWN | 103 |
 | **TOTAL** | **12,478** |
 
-![Bar Chart - v1](screenshots/bar_chart.png)
+![Bar Chart - v1](TrivyImage/screenshots/bar_chart.png)
 
-![Pie Chart - v1](screenshots/pie_chart.png)
+![Pie Chart - v1](TrivyImage/screenshots/pie_chart.png)
 
-![Top 10 Critical CVEs](screenshots/top10_cves.png)
+![Top 10 Critical CVEs](TrivyImage/screenshots/top10_cves.png)
 
 ---
 
@@ -123,7 +123,7 @@ docker build -t ivolve-app:v2 .
 trivy image --format json -o trivy-report-v2.json ivolve-app:v2
 ```
 
-![Scan ivolve-app:v2 and generate report](screenshots/scanV2.png)
+![Scan ivolve-app:v2 and generate report](TrivyImage/screenshots/scanV2.png)
 
 > Detected OS changed from debian to alpine family version 3.21.3 with only 17 packages
 
@@ -135,9 +135,9 @@ trivy image --format json -o trivy-report-v2.json ivolve-app:v2
 python3 generate_report.py
 ```
 
-![Comparison Chart - HIGH and CRITICAL](screenshots/comparison_chart.png)
+![Comparison Chart - HIGH and CRITICAL](TrivyImage/screenshots/comparison_chart.png)
 
-![Pie Chart - v2](screenshots/pie_chart_v2.png)
+![Pie Chart - v2](TrivyImage/screenshots/pie_chart_v2.png)
 
 | Severity | v1 (node:18-bullseye) | v2 (node:18-alpine) | Change |
 |----------|-----------------------|----------------------|--------|

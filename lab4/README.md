@@ -21,7 +21,7 @@ cd ImageOptimization-
 docker build -t image1 .
 ```
 
-![Build image1](../screenshots/hh.png)
+![Build image1](screenshots/hh.png)
 
 ---
 
@@ -31,7 +31,7 @@ docker build -t image1 .
 docker image ls image1
 ```
 
-![image1 size](../screenshots/image1size.png)
+![image1 size](screenshots/image1size.png)
 
 > image1 size: **671 MB** (DISK USAGE) — built with full Maven + JDK image
 
@@ -49,7 +49,7 @@ docker run -d -p 8080:8080 --name container1 image1
 
 Open the browser at `http://localhost:8080`
 
-![App running from container1](../screenshots/verfyimagework.png)
+![App running from container1](screenshots/verfyimagework.png)
 
 ---
 
@@ -77,7 +77,6 @@ RUN mvn dependency:go-offline
 
 COPY src ./src
 RUN mvn package -DskipTests
-
 
 FROM eclipse-temurin:17-jre-alpine
 
@@ -115,7 +114,7 @@ docker build -t image2 .
 docker images | grep -E "image1|image2"
 ```
 
-![image1 vs image2 size comparison](../screenshots/image1vsimage2Size.png)
+![image1 vs image2 size comparison](screenshots/image1vsimage2Size.png)
 
 | Image | Disk Usage | Content Size |
 |-------|-----------|--------------|
@@ -138,7 +137,7 @@ docker run -d -p 8080:8080 --name container2 image2
 
 Open the browser at `http://localhost:8080`
 
-![App running from container2](../screenshots/verfyimagework.png)
+![App running from container2](screenshots/verfyimagework.png)
 
 Verify non-root user:
 
@@ -146,9 +145,9 @@ Verify non-root user:
 docker exec container2 whoami
 ```
 
-![whoami output + stop + delete container2](../screenshots/steps.png)
+![whoami output + stop + delete container2](screenshots/steps.png)
 
-> Output: `appuser` — confirms the app is running as a **non-root user** ✅
+> Output: `appuser` — confirms the app is running as a **non-root user** 
 
 ---
 
@@ -170,7 +169,7 @@ docker save -o lab-image.tar image2
 ls -lh lab-image.tar
 ```
 
-![Save image2 as TAR](../screenshots/steps.png)
+![Save image2 as TAR](screenshots/steps.png)
 
 > `lab-image.tar` created — size: **101 MB**
 
@@ -192,7 +191,7 @@ docker rmi image2
 docker load -i lab-image.tar
 ```
 
-![Load image from TAR and verify](../screenshots/loadfromlocal.png)
+![Load image from TAR and verify](screenshots/loadfromlocal.png)
 
 > Output: `Loaded image: image2:latest` 
 
@@ -204,7 +203,7 @@ docker load -i lab-image.tar
 docker images image2
 ```
 
-![image2 restored](../screenshots/loadfromlocal.png)
+![image2 restored](screenshots/loadfromlocal.png)
 
 > image2 is back in the local Docker host with **340 MB disk usage** 
 

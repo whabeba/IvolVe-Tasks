@@ -189,7 +189,7 @@ All three containers should have status `Up`.
 
 ```bash
 curl -X POST http://localhost:8080/send \
-  -d "message=Hello from terminal"
+  -d "message=Hello from menofeya"
 ```
 
 Expected response: a redirect to `/`
@@ -204,7 +204,7 @@ docker exec frontend python3 -c \
 Expected response:
 
 ```json
-{"messages": ["Hello from terminal"]}
+{"messages": ["Hello from menofeya"]}
 ```
 
 #### Verify the data file was created on the host

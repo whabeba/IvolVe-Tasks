@@ -54,9 +54,6 @@ Verify the images were created:
 docker images
 ```
 
-**Screenshot — `docker images` output showing the three built images:**
-
-![docker images](screenshots/docker-images.png)
 
 ---
 
@@ -78,9 +75,9 @@ Verify the networks were created:
 docker network ls
 ```
 
-**Screenshot — `docker network ls` output showing both networks:**
+**Screenshot — `docker network create` and `docker network ls` output showing both networks:**
 
-![docker network ls](screenshots/docker-network-ls.png)
+![docker network ls](screenshots/networks.png)
 
 ---
 
@@ -99,9 +96,6 @@ Verify the volumes were created:
 docker volume ls
 ```
 
-**Screenshot — `docker volume ls` output showing both volumes:**
-
-![docker volume ls](screenshots/docker-volume-ls.png)
 
 ---
 
@@ -185,7 +179,7 @@ All three containers should have status `Up`.
 
 **Screenshot — `docker ps` output showing frontend, backend, and notification running:**
 
-![docker ps](screenshots/docker-ps.png)
+![docker ps](screenshots/statusUp.png)
 
 ---
 
@@ -235,13 +229,11 @@ docker logs notification
 
 Expected output includes a line confirming the notification was received for the message.
 
-**Screenshot — browser showing the application at `http://localhost:8080` with messages displayed:**
+**Screenshot — browser showing the application at `http://localhost:8080` with messages created and retrieved:**
 
-![app browser](screenshots/app-browser.png)
+![app browser](screenshots/frontend.png)
 
-**Screenshot — `docker logs notification` showing notification received:**
-
-![notification logs](screenshots/notification-logs.png)
+![app messages](screenshots/terminal.png)
 
 ---
 

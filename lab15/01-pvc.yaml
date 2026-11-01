@@ -1,0 +1,15 @@
+# Re-uses the PersistentVolume created in Lab 13 (hostPath /mnt/app-logs, 1Gi, RWX, Retain).
+# The PV is cluster-scoped, so the claim has to live in the same namespace as the Pods.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ivolvepvc
+  namespace: ivolve
+spec:
+  storageClassName: ""
+  volumeName: ivolvepv
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,45 @@
+# One-shot client pod used to verify the database and the application user's privileges.
+# The password is never typed on the command line: the MySQL client reads MYSQL_PWD from the env.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysql-check
+  namespace: ivolve
+  labels:
+    purpose: verification
+spec:
+  restartPolicy: Never
+  nodeSelector:
+    project: ivolve
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: ivolveApp
+      effect: NoSchedule
+  containers:
+    - name: mysql-client
+      image: mysql:8
+      imagePullPolicy: IfNotPresent
+      env:
+        - name: MYSQL_PWD
+          valueFrom:
+            secretKeyRef:
+              name: ivolvesecret
+              key: MYSQL_ROOT_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: ivolvecm
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: ivolvecm
+              key: MYSQL_USER
+      command:
+        - bash
+        - -c
+        - |
+          mysql -h ivolvedbsvc -u root -e "SHOW DATABASES LIKE '$DB_NAME';"
+          echo "---- privileges of '$DB_USER' ----"
+          mysql -h ivolvedbsvc -u root -e "SHOW GRANTS FOR '$DB_USER'@'%';"

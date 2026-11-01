@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ivolveapp
+  namespace: ivolve
+  labels:
+    app: ivolveapp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ivolveapp
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: ivolveapp
+    spec:
+      # Only schedule on the node labelled in Lab 14/15
+      nodeSelector:
+        project: ivolve
+      # Tolerate a node tainted with workload=ivolveApp:NoSchedule
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: ivolveApp
+          effect: NoSchedule
+      initContainers:
+        # Creates the `ivolve` database and grants the application user its privileges
+        - name: init-db
+          image: mysql:8
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: DB_HOST
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: MYSQL_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ivolvesecret
+                  key: MYSQL_PASSWORD
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ivolvesecret
+                  key: MYSQL_ROOT_PASSWORD
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              echo "Waiting for MySQL at $DB_HOST ..."
+              until MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -h "$DB_HOST" -u root -e "SELECT 1" >/dev/null 2>&1; do
+                echo "MySQL not ready yet - retrying in 3s"
+                sleep 3
+              done
+              echo "MySQL is up. Ensuring database and privileges ..."
+              MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -h "$DB_HOST" -u root -e "
+                CREATE DATABASE IF NOT EXISTS \`$DB_NAME\`;
+                CREATE USER IF NOT EXISTS '$DB_USER'@'%' IDENTIFIED BY '$DB_PASSWORD';
+                GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'%';
+                FLUSH PRIVILEGES;"
+              echo "Database '$DB_NAME' is ready and '$DB_USER' has full privileges on it."
+      containers:
+        - name: app
+          image: onlyhabiba/ivolve-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: DB_HOST
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: ivolvecm
+                  key: MYSQL_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ivolvesecret
+                  key: MYSQL_PASSWORD
+          volumeMounts:
+            # The Node.js app writes morgan access logs to /app/logs
+            - name: app-logs
+              mountPath: /app/logs
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+      volumes:
+        - name: app-logs
+          persistentVolumeClaim:
+            claimName: ivolvepvc

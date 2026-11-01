@@ -1,0 +1,24 @@
+# Lab 17: only the application Pods may talk to MySQL, and only on port 3306.
+# Requires a CNI that enforces NetworkPolicy (Calico on this cluster).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ivolvenp
+  namespace: ivolve
+spec:
+  # Applies to the MySQL Pods of the Lab 14 StatefulSet (label app=ivolvedb)
+  podSelector:
+    matchLabels:
+      app: ivolvedb
+  policyTypes:
+    - Ingress
+  ingress:
+    # Allow traffic only from Pods carrying app=ivolveapp
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ivolveapp
+      # ... and only to the MySQL port
+      ports:
+        - protocol: TCP
+          port: 3306

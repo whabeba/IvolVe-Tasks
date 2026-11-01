@@ -102,7 +102,12 @@ data:
   MYSQL_USER: "ivolveuser"
   DB_HOST: "ivolvedbsvc.ivolve.svc.cluster.local"
   DB_PORT: "3306"
+  DB_NAME: "ivolve"
 ```
+
+> `DB_NAME` was added for **Lab 15**: the Node.js application from Lab 8 is built with the database
+> name `ivolve` hardcoded, so the Deployment (and its init container) read it from this ConfigMap
+> instead of duplicating the literal string in the manifests.
 
 ### 3. Secret (`02-secret.example.yaml` → `02-secret.yaml`)
 

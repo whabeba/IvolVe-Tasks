@@ -10,3 +10,5 @@ data:
   MYSQL_USER: "ivolveuser"
   DB_HOST: "ivolvedbsvc.ivolve.svc.cluster.local"
   DB_PORT: "3306"
+  # database used by the Lab 8 Node.js application (Lab 15)
+  DB_NAME: "ivolve"

@@ -62,12 +62,15 @@ The resulting stable DNS records are:
 lab14/
 ├── 00-namespace.yaml       # Namespace: ivolve
 ├── 01-configmap.yaml       # ConfigMap: ivolvecm  (non-sensitive DB config)
-├── 02-secret.yaml          # Secret: ivolvesecret (DB passwords, base64)
+├── 02-secret.example.yaml  # Secret template (the real 02-secret.yaml is git-ignored)
 ├── 03-service-headless.yaml# Service: ivolvedbsvc (clusterIP: None)
 ├── 04-statefulset.yaml     # StatefulSet: ivolvedb (MySQL + PVC template)
 ├── README.md
 └── screenshots/            # Execution and verification evidence
 ```
+
+> The real Secret manifest (`02-secret.yaml`) is **not committed**. Only the template
+> `02-secret.example.yaml` is published; the live file is listed in `.gitignore`.
 
 ---
 
@@ -101,9 +104,9 @@ data:
   DB_PORT: "3306"
 ```
 
-### 3. Secret (`02-secret.yaml`)
+### 3. Secret (`02-secret.example.yaml` → `02-secret.yaml`)
 
-Holds the credentials, base64-encoded (`RootPass123`, `Iv0lvePass123`).
+Holds the database credentials. The repository only ships the **template**:
 
 ```yaml
 apiVersion: v1
@@ -115,9 +118,24 @@ metadata:
     app: ivolvedb
 type: Opaque
 data:
-  MYSQL_ROOT_PASSWORD: Um9vdFBhc3MxMjM=
-  MYSQL_PASSWORD: SXYwbHZlUGFzczEyMw==
+  MYSQL_ROOT_PASSWORD: REPLACE_WITH_BASE64_ROOT_PASSWORD
+  MYSQL_PASSWORD: REPLACE_WITH_BASE64_APP_PASSWORD
 ```
+
+Create the real manifest from the template, fill in base64-encoded values, then apply it:
+
+```bash
+cp 02-secret.example.yaml 02-secret.yaml
+
+# base64 is encoding, not encryption — keep the real values out of git
+printf %s 'your-root-password' | base64     # paste into MYSQL_ROOT_PASSWORD
+printf %s 'your-app-password'  | base64     # paste into MYSQL_PASSWORD
+
+kubectl apply -f 02-secret.yaml
+```
+
+> `02-secret.yaml` is git-ignored, so the value never reaches GitHub. The screenshots in this
+> lab show the lab-only dummy credentials that were used on the local Minikube cluster.
 
 ### 4. Headless Service (`03-service-headless.yaml`)
 
@@ -265,6 +283,7 @@ The node is reported with `PROJECT=ivolve`.
 ### Step 3: Create the ConfigMap, Secret and Headless Service
 
 ```bash
+cp 02-secret.example.yaml 02-secret.yaml     # fill in the real base64 values first
 kubectl apply -f 01-configmap.yaml
 kubectl apply -f 02-secret.yaml
 kubectl apply -f 03-service-headless.yaml
@@ -325,10 +344,16 @@ The claim created from the template is `Bound` with `1Gi` and `RWO`, and the MyS
 
 ### Step 8: Connect with a MySQL Client Through the Headless Service
 
+Read the root password from the Secret instead of hardcoding it:
+
 ```bash
+ROOT_PW=$(kubectl get secret ivolvesecret -n ivolve \
+  -o jsonpath='{.data.MYSQL_ROOT_PASSWORD}' | base64 -d)
+
 kubectl run mysql-client -n ivolve --image=mysql:8 --image-pull-policy=IfNotPresent \
-  --restart=Never --command -- mysql -h ivolvedbsvc -uroot -pRootPass123 \
+  --restart=Never --command -- mysql -h ivolvedbsvc -uroot -p"$ROOT_PW" \
   -e "SELECT VERSION() AS version, @@hostname AS running_on; SHOW DATABASES;"
+
 kubectl wait --for=jsonpath='{.status.phase}'=Succeeded pod/mysql-client -n ivolve --timeout=180s
 kubectl logs -n ivolve mysql-client
 kubectl delete pod mysql-client -n ivolve
@@ -343,10 +368,13 @@ The client connects using the **Service name** (not an IP), reports MySQL `8.4.1
 ```bash
 kubectl run dnstest --image=busybox:1.36 --image-pull-policy=IfNotPresent --restart=Never \
   -n ivolve --command -- nslookup ivolvedbsvc.ivolve.svc.cluster.local
+
 kubectl run dnspod --image=busybox:1.36 --image-pull-policy=IfNotPresent --restart=Never \
   -n ivolve --command -- nslookup ivolvedb-0.ivolvedbsvc.ivolve.svc.cluster.local
+
 kubectl logs -n ivolve dnstest
 kubectl logs -n ivolve dnspod
+kubectl delete pod dnstest dnspod -n ivolve
 ```
 
 Both names resolve to the same Pod IP (`10.244.0.30` at the time of the test), confirming that the Headless Service provides the stable per-Pod DNS identity:
@@ -359,16 +387,18 @@ Both names resolve to the same Pod IP (`10.244.0.30` at the time of the test), c
 ### Step 10: Prove the Storage is Persistent
 
 ```bash
-kubectl exec -n ivolve ivolvedb-0 -- mysql -uroot -pRootPass123 \
-  -e "CREATE DATABASE IF NOT EXISTS prooflab; CREATE TABLE IF NOT EXISTS prooflab.persist(id INT);
-      TRUNCATE TABLE prooflab.persist; INSERT INTO prooflab.persist VALUES (42);
+kubectl exec -n ivolve ivolvedb-0 -- mysql -uroot -p"$ROOT_PW" \
+  -e "CREATE DATABASE IF NOT EXISTS prooflab;
+      CREATE TABLE IF NOT EXISTS prooflab.persist(id INT);
+      TRUNCATE TABLE prooflab.persist;
+      INSERT INTO prooflab.persist VALUES (42);
       SELECT * FROM prooflab.persist;"
 
 kubectl rollout restart statefulset/ivolvedb -n ivolve
 kubectl rollout status statefulset/ivolvedb -n ivolve --timeout=300s
 kubectl get pod -n ivolve -o wide
 
-kubectl exec -n ivolve ivolvedb-0 -- mysql -uroot -pRootPass123 \
+kubectl exec -n ivolve ivolvedb-0 -- mysql -uroot -p"$ROOT_PW" \
   -e "SELECT * FROM prooflab.persist;"
 ```
 
@@ -390,6 +420,16 @@ The Pod is destroyed and recreated with the same name, and the row `42` is still
 | Headless Service `ivolvedbsvc` | Step 3 — `CLUSTER-IP None` |
 | MySQL client connectivity | Step 8 — version, hostname, databases |
 | Pod DNS resolution | Step 9 — FQDN → Pod IP |
+
+---
+
+## Security Note
+
+- The credentials used during this lab were **lab-only dummy values** on a local Minikube cluster.
+- The live Secret manifest (`02-secret.yaml`) is **git-ignored**; only `02-secret.example.yaml` is published.
+- Base64 is encoding, **not encryption** — Kubernetes Secrets are protected by RBAC and etcd encryption, not by base64.
+- The commands in this README read the password from the cluster at runtime instead of hardcoding it.
+- The screenshots show the dummy values because they are the evidence of the actual execution.
 
 ---
 

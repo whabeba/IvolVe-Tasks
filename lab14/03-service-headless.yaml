@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ivolvedbsvc
+  namespace: ivolve
+  labels:
+    app: ivolvedb
+spec:
+  # Headless Service: no ClusterIP, DNS returns the Pod IPs directly
+  clusterIP: None
+  selector:
+    app: ivolvedb
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP
+  # Publish DNS records even before the Pod is Ready (stable identity for StatefulSets)
+  publishNotReadyAddresses: true

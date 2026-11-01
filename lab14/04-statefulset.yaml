@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ivolvedb
+  namespace: ivolve
+  labels:
+    app: ivolvedb
+spec:
+  # Must match the name of the Headless Service
+  serviceName: ivolvedbsvc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ivolvedb
+  template:
+    metadata:
+      labels:
+        app: ivolvedb
+    spec:
+      # Schedule only on a node labelled project=ivolve
+      nodeSelector:
+        project: ivolve
+      # Tolerate a node tainted with workload=ivolveApp:NoSchedule
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: ivolveApp
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: mysql
+          image: mysql:8
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mysql
+              containerPort: 3306
+          # Environment injected from the ConfigMap and the Secret
+          envFrom:
+            - configMapRef:
+                name: ivolvecm
+            - secretRef:
+                name: ivolvesecret
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+          readinessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - mysqladmin ping -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD"
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 1Gi

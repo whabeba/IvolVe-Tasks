@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ivolvecm
+  namespace: ivolve
+  labels:
+    app: ivolvedb
+data:
+  MYSQL_DATABASE: "ivolvedb"
+  MYSQL_USER: "ivolveuser"
+  DB_HOST: "ivolvedbsvc.ivolve.svc.cluster.local"
+  DB_PORT: "3306"

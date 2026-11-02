@@ -1,0 +1,10 @@
+# Long-lived token for the ServiceAccount.
+# The token controller fills in the "token" key once the Secret is created.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jenkinssa-token
+  namespace: ivolve
+  annotations:
+    kubernetes.io/service-account.name: jenkinssa
+type: kubernetes.io/service-account-token

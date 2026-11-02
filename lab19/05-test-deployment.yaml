@@ -1,0 +1,24 @@
+# Applied by the ServiceAccount token (not by the cluster admin) to prove
+# that "create" on deployments really works.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rbac-created
+  namespace: ivolve
+  labels:
+    app: rbac-created
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rbac-created
+  template:
+    metadata:
+      labels:
+        app: rbac-created
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "sleep 3600"]

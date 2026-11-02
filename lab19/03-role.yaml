@@ -1,0 +1,10 @@
+# Namespaced role: only Deployments, only create and update.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ivolvdeployrole
+  namespace: ivolve
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["create", "update"]

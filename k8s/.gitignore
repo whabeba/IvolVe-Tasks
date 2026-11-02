@@ -1,0 +1,15 @@
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Image archives (pull/load them locally instead of committing them)
+*.tar
+*.tar.gz
+*.tar.xz

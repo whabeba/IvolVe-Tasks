@@ -20,8 +20,8 @@ The cluster consists of one control plane node (master) and one worker node, con
 
 | Node | Role | Public IP | Private IP |
 |------|------|-----------|------------|
-| k8s-master | Control Plane | 18.205.246.219 | 172.31.26.158 |
-| k8s-worker | Worker | 13.220.85.48 | 172.31.30.179 |
+| k8s-master | Control Plane | `<master-public-ip>` | 172.31.26.158 |
+| k8s-worker | Worker | `<worker-public-ip>` | 172.31.30.179 |
 
 Both instances run Ubuntu 22.04 LTS on AWS EC2 (t3.micro) in us-east-1.
 
@@ -172,8 +172,8 @@ On the worker node, the kubeadm join command from Step 5 was executed:
 sudo modprobe br_netfilter
 echo 1 | sudo tee /proc/sys/net/bridge/bridge-nf-call-iptables
 
-sudo kubeadm join 172.31.26.158:6443 --token pc0ps1.xfbcwakznbqch4md \
-    --discovery-token-ca-cert-hash sha256:e8a27acacc4bf350a48c06479a884a666e0572f9f0848fdda7d202f307e81f87 \
+sudo kubeadm join 172.31.26.158:6443 --token <bootstrap-token> \
+    --discovery-token-ca-cert-hash sha256:<cluster-ca-cert-hash> \
     --ignore-preflight-errors=Mem
 ```
 

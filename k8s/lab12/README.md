@@ -47,16 +47,16 @@ metadata:
   namespace: ivolve
 type: Opaque
 data:
-  MYSQL_ROOT_PASSWORD: cm9vdHBhc3MxMjM=
-  DB_PASSWORD: aXZvbHZlcGFzczEyMw==
+  MYSQL_ROOT_PASSWORD: <base64-of-your-root-password>
+  DB_PASSWORD: <base64-of-your-app-password>
 ```
 
 ### 3. Environment Security Files (`.env` and `.env.example`)
 To ensure sensitive data is not tracked or leaked on GitHub:
-- `.env` (Ignored via `.gitignore`):
+- `.env` (created locally, ignored via `.gitignore`) — holds the real values:
   ```env
-  MYSQL_ROOT_PASSWORD=rootpass123
-  DB_PASSWORD=ivolvepass123
+  MYSQL_ROOT_PASSWORD=<your-root-password>
+  DB_PASSWORD=<your-app-password>
   ```
 - `.env.example` (Committed to GitHub as a safe reference template):
   ```env
@@ -94,12 +94,12 @@ configmap/ivolvecm created
 
 Encode the `MYSQL_ROOT_PASSWORD` using Base64:
 ```bash
-echo -n 'rootpass123' | base64
+echo -n '<your-root-password>' | base64
 ```
 
 Generated Base64 value:
 ```
-cm9vdHBhc3MxMjM=
+<base64-of-your-root-password>
 ```
 
 ![Base64 Encode Root Password](screenshots/Screenshot%202026-10-27%20003707.png)
@@ -110,12 +110,12 @@ cm9vdHBhc3MxMjM=
 
 Encode the `DB_PASSWORD` using Base64:
 ```bash
-echo -n 'ivolvepass123' | base64
+echo -n '<your-app-password>' | base64
 ```
 
 Generated Base64 value:
 ```
-aXZvbHZlcGFzczEyMw==
+<base64-of-your-app-password>
 ```
 
 ![Base64 Encode Database Password](screenshots/Screenshot%202026-10-27%20003733.png)
@@ -153,7 +153,7 @@ kubectl describe secret ivolvesecret -n ivolve
 
 Output highlights:
 - **Type**: `Opaque`
-- **Data**: `DB_PASSWORD` (13 bytes), `MYSQL_ROOT_PASSWORD` (11 bytes)
+- **Data**: `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD` (the values are masked in the screenshot)
 
 ![Verify Secret with kubectl describe](screenshots/Screenshot%202026-10-27%20003837.png)
 
@@ -169,7 +169,7 @@ echo ""
 
 Output:
 ```
-ivolvepass123
+<your-app-password>
 ```
 
 ![Decode Secret Value](screenshots/Screenshot%202026-10-27%20003915.png)

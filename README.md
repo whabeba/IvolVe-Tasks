@@ -209,12 +209,22 @@ docker compose up -d
 docker compose logs app
 docker compose ps
 curl http://localhost:3000/health
-docker exec -it ivolveapp-db-1 mysql -u root -prootpassword -e "SHOW DATABASES;"
+docker exec -it ivolveapp-db-1 mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES;"
 docker build -t onlyhabiba/ivolve-app:latest .
 docker push onlyhabiba/ivolve-app:latest
 ```
 
 [View Lab 8 README](lab8/README.md)
+
+---
+
+### Kubernetes — Labs 9 to 19
+
+All Kubernetes labs are grouped in one folder: **[k8s/](k8s/README.md)**.
+
+They start with a `kubeadm` cluster on AWS EC2, then move to minikube for scheduling, configuration, storage, a MySQL StatefulSet with a Node.js application, resource limits, NetworkPolicy on Calico, a DaemonSet-based monitoring stack, and finally RBAC with ServiceAccounts.
+
+The [k8s/README.md](k8s/README.md) overview has the full lab table, prerequisites, the recommended order (`11 → 12 → 13 → 14 → 15 → 16 → 17 → 18 → 19`) and the CNI/RBAC gotchas.
 
 ---
 

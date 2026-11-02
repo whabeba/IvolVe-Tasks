@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics", "nodes/proxy", "services", "endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/rules.yml
+
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ["alertmanager:9093"]
+
+    scrape_configs:
+      # Prometheus scrapes itself
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      # Discover every node-exporter Pod through the Kubernetes API
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [monitoring]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: node-exporter
+          - source_labels: [__meta_kubernetes_pod_ip]
+            target_label: __address__
+            replacement: ${1}:9100
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: node
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+  rules.yml: |
+    groups:
+      - name: node.rules
+        rules:
+          - alert: NodeExporterDown
+            expr: up{job="node-exporter"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "node-exporter on {{ $labels.instance }} is down"
+              description: "No metrics have been scraped for more than one minute."
+
+          - alert: NodeHighCpuUsage
+            expr: 100 - (avg by (instance, node) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU above 80% on {{ $labels.node }}"
+              description: "Current CPU usage is {{ $value | printf \"%.1f\" }}%."
+
+          - alert: NodeHighMemoryUsage
+            expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 85
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Memory above 85% on {{ $labels.node }}"
+              description: "Current memory usage is {{ $value | printf \"%.1f\" }}%."
+
+          - alert: NodeFilesystemLow
+            expr: (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) * 100 < 15
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Free disk below 15% on {{ $labels.node }} ({{ $labels.mountpoint }})"
+              description: "Only {{ $value | printf \"%.1f\" }}% of the filesystem is free."
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.55.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=6h
+            - --web.enable-lifecycle
+          ports:
+            - name: web
+              containerPort: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: web
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: web
+      port: 9090
+      targetPort: 9090

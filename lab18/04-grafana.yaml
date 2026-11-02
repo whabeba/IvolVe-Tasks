@@ -1,0 +1,264 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  provider.yaml: |
+    apiVersion: 1
+    providers:
+      - name: ivolve
+        orgId: 1
+        folder: Ivolve
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards
+          foldersFromFilesStructure: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-node
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  node-exporter.json: |
+    {
+      "uid": "node-exporter",
+      "title": "Node Exporter / Minikube",
+      "tags": ["node-exporter", "ivolve"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-30m", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "CPU usage",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "Memory usage",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+              "legendFormat": "{{instance}}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Filesystem usage",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+          "fieldConfig": {
+            "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 - (node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\"}) * 100",
+              "legendFormat": "{{mountpoint}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Load average",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+          "fieldConfig": { "defaults": { "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            { "refId": "A", "expr": "node_load1", "legendFormat": "load 1m" },
+            { "refId": "B", "expr": "node_load5", "legendFormat": "load 5m" }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Uptime",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+          "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+          "targets": [
+            { "refId": "A", "expr": "time() - node_boot_time_seconds", "legendFormat": "uptime" }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "Network receive",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "fieldConfig": {
+            "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[5m])",
+              "legendFormat": "{{device}}"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Network transmit",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "fieldConfig": {
+            "defaults": { "unit": "Bps", "custom": { "fillOpacity": 10, "lineWidth": 2 } },
+            "overrides": []
+          },
+          "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[5m])",
+              "legendFormat": "{{device}}"
+            }
+          ]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.3.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+          ports:
+            - name: web
+              containerPort: 3000
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: web
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+        - name: dashboards
+          configMap:
+            name: grafana-dashboard-node
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: web
+      port: 3000
+      targetPort: 3000

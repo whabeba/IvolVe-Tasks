@@ -30,10 +30,6 @@ spec:
     - group: ""
       kind: Secret
 
-  # Warn when something in `ivolve` is no longer managed by this project.
-  orphanedResources:
-    warn: true
-
   syncWindows:
     - kind: allow
       schedule: "* * * * *"

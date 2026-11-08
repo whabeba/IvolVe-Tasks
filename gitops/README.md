@@ -1,8 +1,14 @@
-# Lab 23: Implementing a GitOps Workflow with Jenkins and Argo CD
+# Lab 23: Implementing a GitOps Workflow with Argo CD
 
-GitOps flips the last mile of CI/CD: **Jenkins never touches the cluster**. It builds
-the image and writes the new tag into Git. **Argo CD** is the only component with
-cluster credentials, and it continuously reconciles the cluster against Git.
+GitOps flips the last mile of CI/CD: **the CI server never touches the cluster**.
+It builds the image and writes the new tag into Git. **Argo CD** is the only
+component with cluster credentials, and it continuously reconciles the cluster
+against Git.
+
+The lab sheet names Jenkins as the CI. Here the CI half is implemented with
+**GitHub Actions** (the repository is public, so it is free and needs no server),
+and `gitops/Jenkinsfile` is kept as the equivalent Jenkins implementation — the
+GitOps contract is identical either way.
 
 ---
 
@@ -55,6 +61,8 @@ gitops/
 ├── argocd/
 │   ├── project.yaml               # AppProject: least privilege
 │   └── application.yaml           # Application `ivolve`
+├── tests/
+│   └── verify.sh                  # TC-01..TC-15 as executable checks
 ├── Jenkinsfile                    # optional reference implementation
 └── README.md
 
@@ -104,14 +112,20 @@ commit back.
 
 ```bash
 kubectl create namespace argocd
-kubectl apply -n argocd -f \
-  https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd --server-side --force-conflicts \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 kubectl -n argocd rollout status deploy/argocd-server --timeout=600s
 kubectl -n argocd get pods
 ```
 
 Expected: 7 pods, all `Running`.
+
+> `--server-side` is **required** on recent Kubernetes versions. A plain
+> `kubectl apply` fails with
+> `The CustomResourceDefinition "applicationsets.argoproj.io" is invalid:
+> metadata.annotations: Too long` — that is a client-side apply limit, not a
+> problem with the manifest.
 
 ```bash
 kubectl -n argocd get deploy -o custom-columns=\
@@ -131,6 +145,18 @@ kubectl -n argocd port-forward svc/argocd-server 8081:443
 ```
 
 Open <https://localhost:8081> (accept the self-signed certificate).
+
+> **Local HTTP access.** If the browser refuses the self-signed certificate
+> (Chromium-based tools do), terminate TLS in front of Argo CD as you would with
+> an Ingress:
+>
+> ```bash
+> kubectl -n argocd patch configmap argocd-cmd-params-cm \
+>   --type merge -p '{"data":{"server.insecure":"true"}}'
+> kubectl -n argocd rollout restart deploy/argocd-server
+> kubectl -n argocd port-forward svc/argocd-server 8081:80
+> # then open http://localhost:8081
+> ```
 
 **Username:** `admin`
 **Password:**
@@ -314,6 +340,12 @@ ci(gitops): deploy onlyhabiba/ivolve-gitops:7 [skip ci]
 
 `[skip ci]` stops the commit from triggering another run, so the loop terminates.
 
+> **Bootstrap note.** `kustomization.yaml` ships with `newTag: "1.0.0"`, which is a
+> placeholder. The first successful workflow run replaces it with a tag that really
+> exists on Docker Hub. Before that first run the image has to come from somewhere
+> else (`docker build` + `minikube image load ...`), otherwise the pods sit in
+> `ImagePullBackOff` — which is Argo CD behaving correctly, not a bug.
+
 > **Note:** the `push` trigger only fires for `gitops/app/**` and the workflow
 > file itself. Manifest commits are therefore ignored by design.
 
@@ -387,6 +419,63 @@ sleep 30; kubectl -n ivolve get deploy ivolve -o jsonpath='{..image}'; echo
 kubectl -n ivolve port-forward svc/ivolve 8082:80
 curl -s http://localhost:8082/ | grep -o 'version [0-9]*'
 ```
+
+### Executable test suite
+
+The table above is not only documentation — it is implemented as a script, so a
+reviewer can reproduce the result instead of trusting a screenshot:
+
+```bash
+bash gitops/tests/verify.sh            # read-only checks (a few seconds)
+bash gitops/tests/verify.sh --drift    # also TC-08 self-heal and TC-13 drift
+```
+
+`--drift` is opt-in because those two tests intentionally break the cluster and
+wait for Argo CD to repair it.
+
+```text
+$ bash gitops/tests/verify.sh
+Lab 23 - GitOps with Argo CD
+context: minikube   app: argocd/ivolve -> ivolve
+-------------------------------------------------------------------------------
+  PASS  TC-01   Argo CD components running               7/7 ready
+  PASS  TC-02   argocd-server service exposed            ports: http https
+  PASS  TC-03   admin credential present                 argocd-secret
+  SKIP  TC-04   Repository reachable                     public repo - no credential entry needed
+  PASS  TC-05   Application Synced + Healthy             rev e71ca525
+  PASS  TC-06.1 Deployed image == Git image              onlyhabiba/ivolve-gitops:1.0.0
+  PASS  TC-06.2 Deployment fully available               2/2 replicas
+  PASS  TC-06.3 Automated sync + prune + selfHeal        {"prune":true,"selfHeal":true}
+  PASS  TC-06.4 Service has ready endpoints              2 pod(s)
+  SKIP  TC-07   Auto-sync on Git change                  needs: edit + git push - see README
+  SKIP  TC-09   Prune deleted resource                   needs: edit + git push - see README
+  SKIP  TC-10   CI builds and pushes image               runs in GitHub Actions - see README
+  SKIP  TC-11   CI only changes newTag                   runs in GitHub Actions - see README
+  SKIP  TC-12   End-to-end rollout                       runs in GitHub Actions - see README
+  SKIP  TC-15   Fail-safe CI                             runs in GitHub Actions - see README
+  PASS  TC-14   CI cannot delete Deployments             denied by RBAC
+  SKIP  TC-08   Self-heal reverts a manual scale         run with --drift
+  SKIP  TC-13   Self-heal reverts a manual image         run with --drift
+-------------------------------------------------------------------------------
+  9 passed, 0 failed, 9 skipped
+```
+
+```text
+$ bash gitops/tests/verify.sh --drift
+...
+-------------------------------------------------------------------------------
+  drift tests - Argo CD should revert both changes in < 120s
+
+  PASS  TC-08   Self-heal reverts a manual scale         scaled to 5, back to 2
+  PASS  TC-13   Self-heal reverts a manual image         restored onlyhabiba/ivolve-gitops:1.0.0
+-------------------------------------------------------------------------------
+  11 passed, 0 failed, 7 skipped
+```
+
+TC-08 and TC-13 are the ones worth reading: the script **deliberately** ran
+`kubectl scale --replicas=5` and `kubectl set image ... nginx:1.25`, and Argo CD
+put both back without anybody doing anything. That is the difference between
+"a CI pipeline that deploys" and "GitOps".
 
 ---
 

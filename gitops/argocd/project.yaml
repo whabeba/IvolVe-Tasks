@@ -1,0 +1,43 @@
+# Least-privilege Argo CD project: this project may only deploy
+# into the `ivolve` namespace and only the kinds the app actually needs.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ivolve
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: GitOps project for the ivolve application
+
+  sourceRepos:
+    - https://github.com/whabeba/IvolVe-Tasks.git
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: ivolve
+
+  # No cluster-scoped resources may be created by this project.
+  clusterResourceWhitelist: []
+
+  namespaceResourceWhitelist:
+    - group: apps
+      kind: Deployment
+    - group: ""
+      kind: Service
+    - group: ""
+      kind: ConfigMap
+    - group: ""
+      kind: Secret
+
+  # Warn when something in `ivolve` is no longer managed by this project.
+  orphanedResources:
+    warn: true
+
+  syncWindows:
+    - kind: allow
+      schedule: "* * * * *"
+      duration: 24h
+      applications:
+        - "*"
+      manualSync: true

@@ -1,0 +1,148 @@
+name: release
+
+# Lab 23 - CI half of the GitOps loop.
+#
+# GitHub Actions builds the image, pushes it, then writes the new tag into
+# gitops/manifests/base/kustomization.yaml and commits it. Argo CD watches that
+# file and rolls the Deployment out. Actions never talks to the cluster.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag (leave empty to use the run number)"
+        required: false
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - "gitops/app/**"
+      - ".github/workflows/release.yml"
+
+# Needed so the manifest job can push the commit back to the repo.
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE_REPO: onlyhabiba/ivolve-gitops
+  MANIFEST_FILE: gitops/manifests/base/kustomization.yaml
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.version }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_RUN_NUMBER}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag: $TAG"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Stamp version into the page
+        run: |
+          sed -i "s/__APP_VERSION__/${{ steps.meta.outputs.tag }}/g" gitops/app/index.html
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: gitops/app
+          push: true
+          tags: |
+            ${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}
+            ${{ env.IMAGE_REPO }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      # Never ship an image that does not answer HTTP.
+      - name: Smoke test the pushed image
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.IMAGE_REPO }}:${{ steps.meta.outputs.tag }}"
+          cid=$(docker run -d -p 18080:8080 "$IMAGE")
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+
+          ok=0
+          for _ in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/ | grep -q "iVolve"; then ok=1; break; fi
+            sleep 1
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::smoke test failed for $IMAGE"
+            docker logs "$cid" || true
+            exit 1
+          fi
+          echo "smoke test passed for $IMAGE"
+
+  update-manifest:
+    name: Update GitOps manifest
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only the tag changes. Nothing else in Git is touched, so the diff is
+      # always reviewable and revertible with a single `git revert`.
+      - name: Point the manifest at the new tag
+        run: |
+          set -euo pipefail
+          sed -i -E 's|(newTag: ).*|\1"${{ needs.build-and-push.outputs.tag }}"|' "$MANIFEST_FILE"
+          echo "--- diff ---"
+          git --no-pager diff
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet -- "$MANIFEST_FILE"; then
+            echo "manifest already up to date - nothing to commit"
+            exit 0
+          fi
+
+          git add "$MANIFEST_FILE"
+          git commit -m "ci(gitops): deploy ${IMAGE_REPO}:${{ needs.build-and-push.outputs.tag }} [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+  summary:
+    name: Summary
+    needs: [build-and-push, update-manifest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write job summary
+        run: |
+          {
+            echo "## Release ${{ needs.build-and-push.outputs.tag }}"
+            echo ""
+            echo "| Step | Result |"
+            echo "|---|---|"
+            echo "| Image pushed | \`${IMAGE_REPO}:${{ needs.build-and-push.outputs.tag }}\` |"
+            echo "| Manifest updated | \`${MANIFEST_FILE}\` |"
+            echo "| Next | Argo CD reconciles \`ivolve\` within ~3 minutes |"
+          } >> "$GITHUB_STEP_SUMMARY"

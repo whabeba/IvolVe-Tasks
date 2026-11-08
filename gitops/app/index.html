@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>iVolve GitOps</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0b1020; color: #e8ecf8;
+           display: flex; min-height: 100vh; margin: 0; align-items: center; justify-content: center; }
+    .card { text-align: center; padding: 3rem 4rem; border: 1px solid #2a3556;
+            border-radius: 16px; background: #131a30; }
+    h1 { margin: 0 0 .5rem; font-size: 2.2rem; }
+    .tag { display: inline-block; margin-top: 1rem; padding: .35rem .9rem; border-radius: 999px;
+           background: #1f6feb; font-weight: 600; }
+    .meta { margin-top: 1.5rem; color: #93a1c4; font-size: .9rem; line-height: 1.7; }
+    code { color: #7ee787; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>iVolve &mdash; GitOps</h1>
+    <p>Deployed by Argo CD from Git, built by Jenkins.</p>
+    <div class="tag">version __APP_VERSION__</div>
+    <div class="meta">
+      image: <code>onlyhabiba/ivolve-gitops</code><br />
+      namespace: <code>ivolve</code><br />
+      source of truth: <code>gitops/manifests/base</code>
+    </div>
+  </main>
+</body>
+</html>

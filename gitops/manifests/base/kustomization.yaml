@@ -1,0 +1,14 @@
+# Kustomize is the single source of truth for the deployed image tag.
+# The Jenkins pipeline only edits the `newTag` value below - nothing else.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ivolve
+
+resources:
+  - deployment.yaml
+  - service.yaml
+
+images:
+  - name: onlyhabiba/ivolve-gitops
+    newTag: "1.0.0"

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ivolve
+  namespace: ivolve
+  labels:
+    app.kubernetes.io/name: ivolve
+    app.kubernetes.io/part-of: ivolve-gitops
+    app.kubernetes.io/managed-by: argocd
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ivolve
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

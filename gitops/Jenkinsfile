@@ -1,0 +1,151 @@
+// Jenkins pipeline for Lab 23 - GitOps with Jenkins + Argo CD
+//
+// What this pipeline does:
+//   1. builds the application image
+//   2. pushes it to Docker Hub
+//   3. updates ONLY the image tag in gitops/manifests/base/kustomization.yaml
+//   4. commits and pushes that change to GitHub
+//   5. waits for Argo CD to notice the commit and roll the Deployment out
+//
+// Jenkins never talks to the Kubernetes API. Argo CD is the only component
+// with cluster access, which is the whole point of GitOps.
+
+pipeline {
+  agent any
+
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  environment {
+    IMAGE_REPO   = "onlyhabiba/ivolve-gitops"
+    IMAGE_TAG    = "${env.BUILD_NUMBER}"
+    APP_DIR      = "gitops/app"
+    MANIFEST_DIR = "gitops/manifests/base"
+    GIT_BRANCH   = "main"
+    GIT_REPO     = "github.com/whabeba/IvolVe-Tasks.git"
+    ARGOCD_APP   = "ivolve"
+    ARGOCD_NS    = "ivolve"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+        sh '''
+          git config user.name  "jenkins-ci"
+          git config user.email "jenkins-ci@users.noreply.github.com"
+          echo "building commit: $(git rev-parse --short HEAD)"
+        '''
+      }
+    }
+
+    stage('Build image') {
+      steps {
+        sh '''
+          cd "$APP_DIR"
+          sed -i "s/__APP_VERSION__/${IMAGE_TAG}/g" index.html || true
+          docker build -t "${IMAGE_REPO}:${IMAGE_TAG}" .
+          docker tag "${IMAGE_REPO}:${IMAGE_TAG}" "${IMAGE_REPO}:latest"
+        '''
+      }
+    }
+
+    stage('Smoke test image') {
+      steps {
+        sh '''
+          cid=$(docker run -d -p 0:8080 "${IMAGE_REPO}:${IMAGE_TAG}")
+          port=$(docker port "$cid" 8080/tcp | head -1 | awk -F: '{print $NF}')
+          ok=0
+          for i in $(seq 1 20); do
+            if curl -fsS "http://127.0.0.1:${port}/" | grep -q "iVolve"; then ok=1; break; fi
+            sleep 1
+          done
+          docker rm -f "$cid" >/dev/null
+          [ "$ok" -eq 1 ] || { echo "smoke test FAILED"; exit 1; }
+          echo "smoke test passed"
+        '''
+      }
+    }
+
+    stage('Push image') {
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS')]) {
+          sh '''
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker push "${IMAGE_REPO}:${IMAGE_TAG}"
+            docker push "${IMAGE_REPO}:latest"
+          '''
+        }
+      }
+      post {
+        always { sh 'docker logout || true' }
+      }
+    }
+
+    // The DeployOnK8s role only changes the tag in Git. That is the whole
+    // "deploy" step now - no kubectl, no kubeconfig in Jenkins.
+    stage('Update GitOps manifest') {
+      steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'github-token',
+            usernameVariable: 'GH_USER',
+            passwordVariable: 'GH_TOKEN')]) {
+          sh '''
+            set -e
+            cd "$MANIFEST_DIR"
+
+            if command -v kustomize >/dev/null 2>&1; then
+              kustomize edit set image "${IMAGE_REPO}:${IMAGE_TAG}"
+            else
+              # fallback: edit the newTag line directly
+              sed -i -E "s|(newTag: ).*|\\1\"${IMAGE_TAG}\"|" kustomization.yaml
+            fi
+
+            cd "$GITHUB_WORKSPACE"
+            git diff --stat
+            git add "$MANIFEST_DIR/kustomization.yaml"
+            git commit -m "ci(gitops): deploy ${IMAGE_REPO}:${IMAGE_TAG} [skip ci]"
+            git push "https://${GH_USER}:${GH_TOKEN}@${GIT_REPO}" "HEAD:${GIT_BRANCH}"
+          '''
+        }
+      }
+    }
+
+    stage('Wait for Argo CD sync') {
+      steps {
+        sh '''
+          echo "waiting for Argo CD to apply ${IMAGE_REPO}:${IMAGE_TAG} ..."
+          for i in $(seq 1 40); do
+            current=$(kubectl -n "$ARGOCD_NS" get deploy ivolve \
+                      -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+            echo "[$i] deployed image: ${current:-<none>}"
+            case "$current" in
+              *":${IMAGE_TAG}") echo "Argo CD applied the new tag"; exit 0 ;;
+            esac
+            sleep 15
+          done
+          echo "TIMEOUT: Argo CD did not apply the new tag"
+          exit 1
+        '''
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "Released ${IMAGE_REPO}:${IMAGE_TAG} - Argo CD is Synced and Healthy."
+    }
+    failure {
+      echo "Pipeline failed. Check the Argo CD UI: Application '${ARGOCD_APP}'."
+    }
+    always {
+      sh 'docker image prune -f || true'
+    }
+  }
+}

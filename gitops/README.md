@@ -63,6 +63,7 @@ gitops/
 │   └── application.yaml           # Application `ivolve`
 ├── tests/
 │   └── verify.sh                  # TC-01..TC-15 as executable checks
+├── screenshots/                   # evidence, referenced by this README
 ├── Jenkinsfile                    # optional reference implementation
 └── README.md
 
@@ -495,15 +496,23 @@ put both back without anybody doing anything. That is the difference between
 
 ## Evidence
 
-Screenshots to capture for the submission:
+### The application is live (deployed only by Argo CD)
 
-1. `argocd get pods` — all running
-2. Argo CD login page / dashboard
-3. Application `ivolve` — **Synced + Healthy**
-4. Application details — source repo + path + revision
-5. Sync policy panel — automated, prune, self-heal
+![Application list - Healthy and Synced](screenshots/01-application-list.jpg)
+
+![Application detail - Synced, Healthy, auto sync enabled](screenshots/02-application-synced-healthy.jpg)
+
+![The deployed app](screenshots/03-application-running.jpg)
+
+### The project is least-privilege
+
+![AppProject - only this repository](screenshots/04-appproject-source.jpg)
+
+![AppProject - only namespace ivolve, no cluster-scoped resources](screenshots/05-appproject-destinations.jpg)
+
+### Still to capture (needs the CI run)
+
 6. GitHub Actions run — all three jobs green
 7. The `ci(gitops): deploy ...` commit made by `github-actions[bot]`
 8. Argo CD after the pipeline — new image tag
 9. `kubectl rollout status` — rollout complete
-10. Self-heal test — replicas reverted

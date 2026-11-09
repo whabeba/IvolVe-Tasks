@@ -507,6 +507,9 @@ The `SKIP` lines are checks that cannot run from inside the cluster — they nee
 Git push or a CI run. TC-10/11/12 are covered by CI run #1 (see
 [Evidence](#evidence)); TC-15 is its inverse.
 
+The `rev` values above are the commits Argo CD had synced **when each block was
+recorded**, so they trail `HEAD` by the documentation commits that followed.
+
 TC-08 and TC-13 are the ones worth reading: the script **deliberately** ran
 `kubectl scale --replicas=5` and `kubectl set image ... nginx:1.25`, and Argo CD
 put both back without anybody doing anything. That is the difference between

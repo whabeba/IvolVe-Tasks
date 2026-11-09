@@ -443,7 +443,7 @@ context: minikube   app: argocd/ivolve -> ivolve
   PASS  TC-02   argocd-server service exposed            ports: http https
   PASS  TC-03   admin credential present                 argocd-secret
   SKIP  TC-04   Repository reachable                     public repo - no credential entry needed
-  PASS  TC-05   Application Synced + Healthy             rev e71ca525
+  PASS  TC-05   Application Synced + Healthy             rev 5ccef3ff
   PASS  TC-06.1 Deployed image == Git image              onlyhabiba/ivolve-gitops:1.0.0
   PASS  TC-06.2 Deployment fully available               2/2 replicas
   PASS  TC-06.3 Automated sync + prune + selfHeal        {"prune":true,"selfHeal":true}

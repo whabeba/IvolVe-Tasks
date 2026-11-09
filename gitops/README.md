@@ -336,16 +336,16 @@ Three jobs run in order:
 The commit produced by CI:
 
 ```
-ci(gitops): deploy onlyhabiba/ivolve-gitops:7 [skip ci]
+ci(gitops): deploy onlyhabiba/ivolve-gitops:1.0.1 [skip ci]
 ```
 
 `[skip ci]` stops the commit from triggering another run, so the loop terminates.
 
-> **Bootstrap note.** `kustomization.yaml` ships with `newTag: "1.0.0"`, which is a
-> placeholder. The first successful workflow run replaces it with a tag that really
-> exists on Docker Hub. Before that first run the image has to come from somewhere
-> else (`docker build` + `minikube image load ...`), otherwise the pods sit in
-> `ImagePullBackOff` — which is Argo CD behaving correctly, not a bug.
+> **Bootstrap note.** The repository originally shipped `newTag: "1.0.0"` as a
+> placeholder, so before the first CI run the image had to exist locally
+> (`docker build` + `minikube image load ...`). CI run #1 replaced it with `1.0.1`,
+> a tag that really exists on Docker Hub — from that point the cluster pulls the
+> image itself and the bootstrap is no longer needed.
 
 > **Note:** the `push` trigger only fires for `gitops/app/**` and the workflow
 > file itself. Manifest commits are therefore ignored by design.
@@ -369,7 +369,31 @@ kubectl -n ivolve get deploy ivolve \
 kubectl -n ivolve rollout status deploy/ivolve
 ```
 
-Expected image ends with `:<BUILD_NUMBER>`.
+Expected image ends with `:<TAG>`.
+
+What the first real run actually produced (run #1, 52 s, all jobs green):
+
+```text
+$ kubectl -n argocd get application ivolve \
+    -o jsonpath='{.status.sync.status} / {.status.health.status} / {.status.sync.revision}'
+Synced / Healthy / 34dea0d54bf1acab1722d9fdf8b00c803a7077d8
+
+$ kubectl -n ivolve get deploy ivolve -o jsonpath='{.spec.template.spec.containers[0].image}'
+onlyhabiba/ivolve-gitops:1.0.1
+
+$ kubectl -n ivolve get pods \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"  "}{.status.containerStatuses[0].imageID}{"\n"}{end}'
+ivolve-86d48cbcd5-2zlwl  docker-pullable://onlyhabiba/ivolve-gitops@sha256:46602199...
+ivolve-86d48cbcd5-px54x  docker-pullable://onlyhabiba/ivolve-gitops@sha256:46602199...
+
+$ curl -s http://localhost:8082/
+<title>iVolve GitOps</title>
+<div class="tag">version 1.0.1</div>
+```
+
+`docker-pullable://` matters: the pods pulled the tag **from Docker Hub**, they did
+not use a locally loaded image. The whole chain is real — build, push, commit,
+reconcile, pull, serve.
 
 ---
 
@@ -382,7 +406,7 @@ Expected image ends with `:<BUILD_NUMBER>`.
 | TC-03 | Login succeeds | `admin` + password from `argocd-initial-admin-secret` | dashboard opens | no `Invalid username or password` |
 | TC-04 | Repository registered | `argocd repo list` | entry `Successful` | state = Successful (skip for public repo) |
 | TC-05 | Application created | `kubectl -n argocd get application ivolve` | app exists, `Synced/Healthy` | both fields match |
-| TC-06 | Initial state matches Git | `kubectl -n ivolve get deploy ivolve` | `2/2` ready, image `:1.0.0` | replicas = 2 |
+| TC-06 | Initial state matches Git | `kubectl -n ivolve get deploy ivolve` | `2/2` ready, image `:1.0.1` | replicas = 2 |
 | TC-07 | Auto-sync on Git change | edit `replicas: 2` → `3`, commit, push | Argo syncs within ~3 min | `3/3` ready |
 | TC-08 | Self-heal | `kubectl -n ivolve scale deploy ivolve --replicas=5` | Argo reverts to 3 | replicas back to 3 |
 | TC-09 | Prune | remove `service.yaml` from `kustomization.yaml`, push | Service deleted | `kubectl get svc ivolve` → NotFound |
@@ -392,6 +416,12 @@ Expected image ends with `:<BUILD_NUMBER>`.
 | TC-13 | Drift from outside Git | `kubectl -n ivolve set image deploy/ivolve app=nginx:1.25` | reverted to Git tag | image back to the Git value |
 | TC-14 | Least privilege (regression) | `kubectl auth can-i delete deploy -n ivolve --as=system:serviceaccount:ivolve:jenkinssa` | `no` | returns `no` |
 | TC-15 | Fail-safe CI | make the Dockerfile fail (e.g. bad `COPY`), run workflow | build job fails | **no** manifest commit, **no** Argo change |
+
+**Status on 9 Nov 2026.** TC-01 → TC-06, TC-08, TC-13 and TC-14 pass locally (see the
+script output below). TC-10, TC-11 and TC-12 were executed in CI run #1 and pass —
+the evidence is in the [Evidence](#evidence) section. TC-04 is a no-op for a public
+repository, and TC-15 is the inverse of TC-10 (it can only be shown by deliberately
+breaking the build), so both are documented rather than executed on `main`.
 
 ### Running the drift tests
 
@@ -443,8 +473,8 @@ context: minikube   app: argocd/ivolve -> ivolve
   PASS  TC-02   argocd-server service exposed            ports: http https
   PASS  TC-03   admin credential present                 argocd-secret
   SKIP  TC-04   Repository reachable                     public repo - no credential entry needed
-  PASS  TC-05   Application Synced + Healthy             rev 5ccef3ff
-  PASS  TC-06.1 Deployed image == Git image              onlyhabiba/ivolve-gitops:1.0.0
+  PASS  TC-05   Application Synced + Healthy             rev 34dea0d5
+  PASS  TC-06.1 Deployed image == Git image              onlyhabiba/ivolve-gitops:1.0.1
   PASS  TC-06.2 Deployment fully available               2/2 replicas
   PASS  TC-06.3 Automated sync + prune + selfHeal        {"prune":true,"selfHeal":true}
   PASS  TC-06.4 Service has ready endpoints              2 pod(s)
@@ -468,10 +498,14 @@ $ bash gitops/tests/verify.sh --drift
   drift tests - Argo CD should revert both changes in < 120s
 
   PASS  TC-08   Self-heal reverts a manual scale         scaled to 5, back to 2
-  PASS  TC-13   Self-heal reverts a manual image         restored onlyhabiba/ivolve-gitops:1.0.0
+  PASS  TC-13   Self-heal reverts a manual image         restored onlyhabiba/ivolve-gitops:1.0.1
 -------------------------------------------------------------------------------
   11 passed, 0 failed, 7 skipped
 ```
+
+The `SKIP` lines are checks that cannot run from inside the cluster — they need a
+Git push or a CI run. TC-10/11/12 are covered by CI run #1 (see
+[Evidence](#evidence)); TC-15 is its inverse.
 
 TC-08 and TC-13 are the ones worth reading: the script **deliberately** ran
 `kubectl scale --replicas=5` and `kubectl set image ... nginx:1.25`, and Argo CD
@@ -510,9 +544,24 @@ put both back without anybody doing anything. That is the difference between
 
 ![AppProject - only namespace ivolve, no cluster-scoped resources](screenshots/05-appproject-destinations.jpg)
 
-### Still to capture (needs the CI run)
+### CI run #1 — the loop closing for real
 
-6. GitHub Actions run — all three jobs green
-7. The `ci(gitops): deploy ...` commit made by `github-actions[bot]`
-8. Argo CD after the pipeline — new image tag
-9. `kubectl rollout status` — rollout complete
+Run: [#1](https://github.com/whabeba/IvolVe-Tasks/actions/runs/42603605220) —
+52 s, three jobs, all green. Triggered with `version = 1.0.1`.
+
+| What happened | Proof |
+|---|---|
+| Built and pushed `onlyhabiba/ivolve-gitops:1.0.1` | [Docker Hub tag 1.0.1](https://hub.docker.com/r/onlyhabiba/ivolve-gitops/tags) — 19.99 MB, digest `27121959d3c7` |
+| Smoke test ran the pushed image and grepped `iVolve` from `:8080` | `smoke test passed for onlyhabiba/ivolve-gitops:1.0.1` |
+| `github-actions[bot]` committed the new tag | `34dea0d ci(gitops): deploy onlyhabiba/ivolve-gitops:1.0.1 [skip ci]` — **1 file, 1 line** |
+| Argo CD noticed and rolled out | `Synced / Healthy`, revision `34dea0d5`, pods `docker-pullable://...@sha256:46602199` |
+| The new code answers over HTTP | `version 1.0.1`, `http_status=200` |
+
+![GitHub Actions - run #1, all jobs green](screenshots/06-actions-run.jpg)
+
+![Docker Hub - the image the CI pushed](screenshots/07-dockerhub-1.0.1.jpg)
+
+![The application serving the tag the CI pushed](screenshots/08-app-version-1.0.1.jpg)
+
+The one-line commit is the whole point: the CI never touched the cluster, and the
+reviewer can read the entire production change in the Git history.
